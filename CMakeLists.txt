@@ -12,7 +12,8 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(CAVC_HEADER_ONLY "C++ header only library of CavalierContours, if ON then no library is built" OFF)
-option(CAVC_BUILD_SHARED_LIB "Build the C API CavalierContours dynamic shared library (SET OFF for static library)" ON)
+option(CAVC_BUILD_SHARED_LIB "Build the C API CavalierContours dynamic shared library (SET OFF for static library)" OFF)
+option(ASM_JS_BUILD "Build JS library using emscripten" ON)
 
 if(CAVC_HEADER_ONLY)
   set(CAVC_CPP_HEADER_ONLY_LIB ${PROJECT_NAME})
@@ -27,38 +28,54 @@ add_library(${CAVC_CPP_HEADER_ONLY_LIB} INTERFACE)
 target_include_directories(${CAVC_CPP_HEADER_ONLY_LIB}
   INTERFACE include/)
 
-if(NOT CAVC_HEADER_ONLY)
-  if(CAVC_BUILD_SHARED_LIB)
-    add_library(${CAVC_C_API_LIB}
-      SHARED src/cavaliercontours.cpp)
-  else()
-    add_library(${CAVC_C_API_LIB}
-      STATIC src/cavaliercontours.cpp)
-    target_compile_definitions(${CAVC_C_API_LIB}
-      PUBLIC CAVC_STATIC_LIB)
-  endif()
-  # compiler warnings, note: not using /W4 on MSVC since it emits warning due to default of /W3
-  # from cmake
-  if(MSVC)
-    if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
-      target_compile_options(${CAVC_C_API_LIB} PRIVATE
-        /clang:-Werror /clang:-Wall /clang:-Wextra /clang:-pedantic-errors /clang:-Wsign-conversion /clang:-Wconversion)
-    endif()
-    target_compile_options(${CAVC_C_API_LIB} PRIVATE
-      /WX)
-  else()
-    target_compile_options(${CAVC_C_API_LIB} PRIVATE
-      -Werror -Wall -Wextra -pedantic-errors -Wsign-conversion -Wconversion)
-  endif()
-  target_compile_definitions(${CAVC_C_API_LIB}
+if(ASM_JS_BUILD)
+  add_executable(offset src/offset.cpp)
+  
+  target_compile_options(offset PRIVATE
+    -Werror -Wall -Wextra -pedantic-errors)
+  target_compile_definitions(offset
     PRIVATE CAVC_EXPORTS)
-  target_include_directories(${CAVC_C_API_LIB}
+  target_include_directories(offset
     PUBLIC c_api_include/)
-  target_link_libraries(${CAVC_C_API_LIB}
+  target_link_libraries(offset
     PRIVATE ${CAVC_CPP_HEADER_ONLY_LIB})
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+  SET(CMAKE_CXX_FLAGS  "--bind -s NO_EXIT_RUNTIME=1 -s MODULARIZE=1 -s EXPORT_ES6=1 -s USE_ES6_IMPORT_META=0")
+else()
+  if(NOT CAVC_HEADER_ONLY)
+    if(CAVC_BUILD_SHARED_LIB)
+      add_library(${CAVC_C_API_LIB}
+        SHARED src/cavaliercontours.cpp)
+    else()
+      add_library(${CAVC_C_API_LIB}
+        STATIC src/cavaliercontours.cpp)
+      target_compile_definitions(${CAVC_C_API_LIB}
+        PUBLIC CAVC_STATIC_LIB)
+    endif()
+    # compiler warnings, note: not using /W4 on MSVC since it emits warning due to default of /W3
+    # from cmake
+    if(MSVC)
+      if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+        target_compile_options(${CAVC_C_API_LIB} PRIVATE
+          /clang:-Werror /clang:-Wall /clang:-Wextra /clang:-pedantic-errors /clang:-Wsign-conversion /clang:-Wconversion)
+      endif()
+      target_compile_options(${CAVC_C_API_LIB} PRIVATE
+        /WX)
+    else()
+      target_compile_options(${CAVC_C_API_LIB} PRIVATE
+        -Werror -Wall -Wextra -pedantic-errors)
+    endif()
+    target_compile_definitions(${CAVC_C_API_LIB}
+      PRIVATE CAVC_EXPORTS)
+    target_include_directories(${CAVC_C_API_LIB}
+      PUBLIC c_api_include/)
+    target_link_libraries(${CAVC_C_API_LIB}
+      PRIVATE ${CAVC_CPP_HEADER_ONLY_LIB})
+  endif()
 endif()
 
-if (NOT_SUBPROJECT AND NOT CAVC_HEADER_ONLY)
+if (NOT_SUBPROJECT AND NOT CAVC_HEADER_ONLY AND NOT ASM_JS_BUILD)
   # output all libraries and executables to the root build dir for simplicity in running tests with dynamic libs
   set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
